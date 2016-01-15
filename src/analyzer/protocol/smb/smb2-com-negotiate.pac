@@ -4,7 +4,7 @@ refine connection SMB_Conn += {
 		%{
 		if ( smb2_negotiate_request )
 			{
-			VectorVal* dialects = new VectorVal(index_vec);
+			VectorVal* dialects = new VectorVal(internal_type("index_vec")->AsVectorType());
 			for ( unsigned int i = 0; i < ${val.dialects}->size(); ++i )
 				{
 				dialects->Assign(i, new Val((*${val.dialects})[i], TYPE_COUNT));
