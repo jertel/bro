@@ -24,6 +24,7 @@ extern TableType* string_set;
 extern TableType* string_array;
 extern TableType* count_set;
 extern VectorType* string_vec;
+extern VectorType* index_vec;
 extern VectorType* mime_matches;
 extern RecordType* mime_match;
 
