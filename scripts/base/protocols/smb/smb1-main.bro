@@ -1,7 +1,7 @@
 module SMB1;
 
 redef record SMB::CmdInfo += {
-	## Dialects offered by the client	
+	## Dialects offered by the client
 	smb1_offered_dialects: string_vec &optional;
 };
 
@@ -31,7 +31,7 @@ event smb1_message(c: connection, hdr: SMB1::Header, is_orig: bool) &priority=5
 
 	if ( tid !in smb_state$tid_map )
 		{
-		local tmp_tree: SMB::TreeInfo = [$uid=c$uid, $id=c$id];
+		local tmp_tree: SMB::TreeInfo = [$ts=network_time(), $uid=c$uid, $id=c$id];
 		smb_state$tid_map[tid] = tmp_tree;
 		}
 	smb_state$current_tree = smb_state$tid_map[tid];
@@ -39,12 +39,12 @@ event smb1_message(c: connection, hdr: SMB1::Header, is_orig: bool) &priority=5
 		{
 		smb_state$current_cmd$tree = smb_state$current_tree$path;
 		}
-		
+
 	if ( smb_state$current_tree?$service )
 		{
 		smb_state$current_cmd$tree_service = smb_state$current_tree$service;
 		}
-	
+
 	if ( mid !in smb_state$pending_cmds )
 		{
 		local tmp_cmd: SMB::CmdInfo = [$ts=network_time(), $uid=c$uid, $id=c$id, $version="SMB1", $command = SMB1::commands[hdr$command]];
@@ -52,10 +52,10 @@ event smb1_message(c: connection, hdr: SMB1::Header, is_orig: bool) &priority=5
 		local tmp_file: SMB::FileInfo = [$ts=network_time(), $uid=c$uid, $id=c$id];
 		tmp_cmd$referenced_file = tmp_file;
 		tmp_cmd$referenced_tree = smb_state$current_tree;
-		
+
 		smb_state$pending_cmds[mid] = tmp_cmd;
 		}
-	
+
 	smb_state$current_cmd = smb_state$pending_cmds[mid];
 
 	if ( !is_orig )
@@ -103,7 +103,7 @@ event smb1_negotiate_response(c: connection, hdr: SMB1::Header, response: SMB1::
 		delete c$smb_state$current_cmd$smb1_offered_dialects;
 		}
 	}
-	
+
 event smb1_negotiate_response(c: connection, hdr: SMB1::Header, response: SMB1::NegotiateResponse) &priority=-5
 	{
 	if ( c$smb_state$current_cmd$status !in SMB::ignored_command_statuses )
@@ -111,7 +111,7 @@ event smb1_negotiate_response(c: connection, hdr: SMB1::Header, response: SMB1::
 		Log::write(SMB::CMD_LOG, c$smb_state$current_cmd);
 		}
 	}
-	
+
 event smb1_tree_connect_andx_request(c: connection, hdr: SMB1::Header, path: string, service: string) &priority=5
 	{
 	local tmp_tree: SMB::TreeInfo = [$ts=network_time(), $uid=c$uid, $id=c$id, $path=path, $service=service];
@@ -124,7 +124,7 @@ event smb1_tree_connect_andx_response(c: connection, hdr: SMB1::Header, service:
 	{
 	c$smb_state$current_cmd$referenced_tree$service = service;
 	c$smb_state$current_cmd$tree_service = service;
-	
+
 	c$smb_state$current_cmd$referenced_tree$native_file_system = native_file_system;
 
 	c$smb_state$current_tree = c$smb_state$current_cmd$referenced_tree;
@@ -160,23 +160,28 @@ event smb1_nt_create_andx_response(c: connection, hdr: SMB1::Header, file_id: co
 	# I'm seeing negative data from IPC tree transfers
 	if ( time_to_double(times$modified) > 0.0 )
 		c$smb_state$current_cmd$referenced_file$times = times;
-	
-	# We can identify the file by its file id now so let's stick it 
+
+	# We can identify the file by its file id now so let's stick it
 	# in the file map.
 	c$smb_state$fid_map[file_id] = c$smb_state$current_cmd$referenced_file;
-	
+
 	c$smb_state$current_file = c$smb_state$fid_map[file_id];
-	
+
 	SMB::write_file_log(c$smb_state$current_file);
 	}
-	
+
 event smb1_read_andx_request(c: connection, hdr: SMB1::Header, file_id: count, offset: count, length: count) &priority=5
-	{
+{
 	SMB::set_current_file(c$smb_state, file_id);
 	c$smb_state$current_file$action = SMB::FILE_READ;
-	c$smb_state$current_cmd$argument = c$smb_state$current_file$name;
+
+	if ( c$smb_state$current_file?$name ) {
+		c$smb_state$current_cmd$argument = c$smb_state$current_file$name;
+	} else if ( c$smb_state$current_file?$path ) {
+		c$smb_state$current_cmd$argument = c$smb_state$current_file$path;
 	}
-	
+}
+
 event smb1_read_andx_request(c: connection, hdr: SMB1::Header, file_id: count, offset: count, length: count) &priority=-5
 	{
 	if ( c$smb_state$current_tree?$path && !c$smb_state$current_file?$path )
@@ -185,7 +190,7 @@ event smb1_read_andx_request(c: connection, hdr: SMB1::Header, file_id: count, o
 	# TODO - Why is this commented out?
 	#write_file_log(c$smb_state$current_file);
 	}
-	
+
 event smb1_read_andx_response(c: connection, hdr: SMB1::Header, data_len: count) &priority=5
 	{
 	if ( c$smb_state$current_cmd$status !in SMB::ignored_command_statuses )
@@ -195,13 +200,18 @@ event smb1_read_andx_response(c: connection, hdr: SMB1::Header, data_len: count)
 	}
 
 event smb1_write_andx_request(c: connection, hdr: SMB1::Header, file_id: count, offset: count, data_len: count) &priority=5
-	{
+{
 	SMB::set_current_file(c$smb_state, file_id);
 	c$smb_state$current_file$action = SMB::FILE_WRITE;
-	if ( !c$smb_state$current_cmd?$argument )
-		c$smb_state$current_cmd$argument = c$smb_state$current_file$name;
+	if ( !c$smb_state$current_cmd?$argument ) {
+		if ( c$smb_state$current_file?$name ) {
+			c$smb_state$current_cmd$argument = c$smb_state$current_file$name;
+		} else if ( c$smb_state$current_file?$path ) {
+			c$smb_state$current_cmd$argument = c$smb_state$current_file$path;
+		}
 	}
-	
+}
+
 event smb1_write_andx_request(c: connection, hdr: SMB1::Header, file_id: count, offset: count, data_len: count) &priority=-5
 	{
 	if ( c$smb_state$current_tree?$path && !c$smb_state$current_file?$path )
@@ -228,11 +238,16 @@ event smb1_close_request(c: connection, hdr: SMB1::Header, file_id: count) &prio
 		{
 		local fl = c$smb_state$fid_map[file_id];
 		# Need to check for existence of path in case tree connect message wasn't seen.
-		if ( c$smb_state$current_tree?$path )
+		if ( c$smb_state$current_tree?$path ) {
 			fl$path = c$smb_state$current_tree$path;
+		}
 
-		c$smb_state$current_cmd$argument = fl$name;
-		
+		if ( fl?$name ) {
+			c$smb_state$current_cmd$argument = fl$name;
+		} else if ( fl?$path ) {
+			c$smb_state$current_cmd$argument = fl$path;
+		}
+
 		delete c$smb_state$fid_map[file_id];
 
 		SMB::write_file_log(fl);
@@ -259,7 +274,7 @@ event smb1_trans2_find_first2_request(c: connection, hdr: SMB1::Header, args: SM
 	{
 	c$smb_state$current_cmd$argument = args$file_name;
 	}
-	
+
 event smb1_session_setup_andx_response(c: connection, hdr: SMB1::Header, response: SMB1::SessionSetupAndXResponse) &priority=-5
 	{
 	if ( c$smb_state$current_cmd$status !in SMB::ignored_command_statuses )
@@ -267,7 +282,7 @@ event smb1_session_setup_andx_response(c: connection, hdr: SMB1::Header, respons
 		Log::write(SMB::CMD_LOG, c$smb_state$current_cmd);
 		}
 	}
-	
+
 event smb_ntlm_negotiate(c: connection, hdr: SMB1::Header, request: SMB::NTLMNegotiate)
 	{
 	c$smb_state$current_cmd$sub_command = "NTLMSSP_NEGOTIATE";
@@ -286,14 +301,14 @@ event smb1_error(c: connection, hdr: SMB1::Header, is_orig: bool)
 			}
 		}
 	}
-	
+
 event smb_ntlm_authenticate(c: connection, hdr: SMB1::Header, request: SMB::NTLMAuthenticate)
 	{
 	c$smb_state$current_cmd$sub_command = "NTLMSSP_AUTHENTICATE";
 
 	local user: string = "";
 	if ( ( request?$domain_name && request$domain_name != "" ) && ( request?$user_name && request$user_name != "" ) )
-		user = fmt("%s\\%s", request$domain_name, request$user_name);	
+		user = fmt("%s\\%s", request$domain_name, request$user_name);
 	else if ( ( request?$workstation && request$workstation != "" ) && ( request?$user_name && request$user_name != "" ) )
 		user = fmt("%s\\%s", request$workstation, request$user_name);
 	else if ( request?$user_name && request$user_name != "" )
@@ -320,16 +335,18 @@ event smb1_transaction_request(c: connection, hdr: SMB1::Header, name: string, s
 	}
 
 event smb1_write_andx_request(c: connection, hdr: SMB1::Header, file_id: count, offset: count, data_len: count)
-	{
-	c$smb_state$pipe_map[file_id] = c$smb_state$current_file$uuid;
+{
+	if ( c$smb_state$current_file?$uuid ) {
+		c$smb_state$pipe_map[file_id] = c$smb_state$current_file$uuid;
 	}
+}
 
 event smb_pipe_bind_ack_response(c: connection, hdr: SMB1::Header)
 	{
 	c$smb_state$current_cmd$sub_command = "RPC_BIND_ACK";
-	c$smb_state$current_cmd$argument = SMB::rpc_uuids[c$smb_state$current_file$uuid];	
+	c$smb_state$current_cmd$argument = SMB::rpc_uuids[c$smb_state$current_file$uuid];
 	}
-	
+
 event smb_pipe_bind_request(c: connection, hdr: SMB1::Header, uuid: string, version: string)
 	{
 	c$smb_state$current_cmd$sub_command = "RPC_BIND";
@@ -338,11 +355,13 @@ event smb_pipe_bind_request(c: connection, hdr: SMB1::Header, uuid: string, vers
 	}
 
 event smb_pipe_request(c: connection, hdr: SMB1::Header, op_num: count)
-	{
-	c$smb_state$current_cmd$argument = fmt("%s: %s", SMB::rpc_uuids[c$smb_state$current_file$uuid],
-									   				 SMB::rpc_sub_cmds[c$smb_state$current_file$uuid][op_num]);
+{
+	if ( c$smb_state$current_file?$uuid) {
+		c$smb_state$current_cmd$argument = fmt("%s: %s", SMB::rpc_uuids[c$smb_state$current_file$uuid],
+										   				 SMB::rpc_sub_cmds[c$smb_state$current_file$uuid][op_num]);
 	}
-	
+}
+
 #event smb1_transaction_setup(c: connection, hdr: SMB1::Header, op_code: count, file_id: count)
 #	{
 #	local uuid = SMB::rpc_uuids[c$smb_state$pipe_map[file_id]];
