@@ -15,6 +15,8 @@ event bro_init()
             
             #if (rec?$query && /mydomain.com/ in rec$query)
             #    return F;
+            
+            return T;
             }
     ]);
 }
