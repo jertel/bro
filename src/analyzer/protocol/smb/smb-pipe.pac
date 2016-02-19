@@ -43,10 +43,14 @@ refine connection SMB_Conn += {
 				BifEvent::generate_smb_pipe_bind_ack_response(bro_analyzer(), bro_analyzer()->Conn(), BuildHeaderVal(header));
 			break;
 		case DCE_RPC_BIND:
-			if ( smb_pipe_bind_request )
+			if ( smb_pipe_bind_request ) {
 			   // TODO - the version number needs to be calculated properly
-				BifEvent::generate_smb_pipe_bind_request(bro_analyzer(), bro_analyzer()->Conn(), BuildHeaderVal(header), \
-												    new StringVal(analyzer::dce_rpc::uuid_to_string(bytestring_to_val(${val.rpc_body.bind.p_context_elem.p_cont_elem[0].abstract_syntax.if_uuid})->Bytes())), new StringVal(fmt("%d.0", ${val.rpc_body.bind.p_context_elem.p_cont_elem[0].abstract_syntax.if_version})));
+				if( ${val.rpc_body.bind.p_context_elem.n_context_elem} > 0 ) {
+					BifEvent::generate_smb_pipe_bind_request(bro_analyzer(), bro_analyzer()->Conn(), BuildHeaderVal(header), \
+						    new StringVal(analyzer::dce_rpc::uuid_to_string(bytestring_to_val(${val.rpc_body.bind.p_context_elem.p_cont_elem[0].abstract_syntax.if_uuid})->Bytes())), 
+						    new StringVal(fmt("%d.0", ${val.rpc_body.bind.p_context_elem.p_cont_elem[0].abstract_syntax.if_version})));
+			    }
+			}
 			break;			
 		}
 		
