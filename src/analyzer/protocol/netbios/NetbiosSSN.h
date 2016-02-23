@@ -5,7 +5,6 @@
 
 #include "analyzer/protocol/udp/UDP.h"
 #include "analyzer/protocol/tcp/TCP.h"
-#include "analyzer/protocol/smb/SMB.h"
 
 namespace analyzer { namespace netbios_ssn {
 
@@ -64,7 +63,7 @@ struct NetbiosDGM_RawMsgHdr {
 
 class NetbiosSSN_Interpreter {
 public:
-	NetbiosSSN_Interpreter(analyzer::Analyzer* analyzer, smb::SMB_Session* smb_session);
+	NetbiosSSN_Interpreter(analyzer::Analyzer* analyzer);
 
 	int ParseMessage(unsigned int type, unsigned int flags,
 			const u_char* data, int len, int is_query);
@@ -100,7 +99,6 @@ protected:
 
 protected:
 	analyzer::Analyzer* analyzer;
-	smb::SMB_Session* smb_session;
 };
 
 
@@ -159,7 +157,6 @@ protected:
 	void ExpireTimer(double t);
 
 	NetbiosSSN_Interpreter* interp;
-	smb::SMB_Session* smb_session;
 	Contents_NetbiosSSN* orig_netbios;
 	Contents_NetbiosSSN* resp_netbios;
 	int did_session_done;

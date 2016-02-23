@@ -47,11 +47,9 @@ NetbiosDGM_RawMsgHdr::NetbiosDGM_RawMsgHdr(const u_char*& data, int& len)
 	}
 
 
-NetbiosSSN_Interpreter::NetbiosSSN_Interpreter(analyzer::Analyzer* arg_analyzer,
-					       smb::SMB_Session* arg_smb_session)
+NetbiosSSN_Interpreter::NetbiosSSN_Interpreter(analyzer::Analyzer* arg_analyzer)
 	{
 	analyzer = arg_analyzer;
-	smb_session = arg_smb_session;
 	}
 
 int NetbiosSSN_Interpreter::ParseMessage(unsigned int type, unsigned int flags,
@@ -106,12 +104,6 @@ int NetbiosSSN_Interpreter::ParseMessage(unsigned int type, unsigned int flags,
 int NetbiosSSN_Interpreter::ParseDatagram(const u_char* data, int len,
 						int is_query)
 	{
-	if ( smb_session )
-		{
-		smb_session->Deliver(is_query, len, data);
-		return 0;
-		}
-
 	return 0;
  	}
 
@@ -131,9 +123,6 @@ int NetbiosSSN_Interpreter::ParseBroadcast(const u_char* data, int len,
 
 	delete srcname;
 	delete dstname;
-
-	if ( smb_session )
-		smb_session->Deliver(is_query, len, data);
 
 	return 0;
 	}
@@ -188,18 +177,10 @@ int NetbiosSSN_Interpreter::ParseSessionMsg(const u_char* data, int len,
 		return 0;
 		}
 
-	if ( smb_session )
-		{
-		smb_session->Deliver(is_query, len, data);
-		return 0;
-		}
-	else
-		{
-		analyzer->Weird("no_smb_session_using_parsesambamsg");
-		data += 4;
-		len -= 4;
-		return ParseSambaMsg(data, len, is_query);
-		}
+	analyzer->Weird("no_smb_session_using_parsesambamsg");
+	data += 4;
+	len -= 4;
+	return ParseSambaMsg(data, len, is_query);
 	}
 
 int NetbiosSSN_Interpreter::ParseSambaMsg(const u_char* data, int len,
@@ -458,8 +439,7 @@ void Contents_NetbiosSSN::DeliverStream(int len, const u_char* data, bool orig)
 NetbiosSSN_Analyzer::NetbiosSSN_Analyzer(Connection* conn)
 : tcp::TCP_ApplicationAnalyzer("NETBIOS", conn)
 	{
-	smb_session = new smb::SMB_Session(this);
-	interp = new NetbiosSSN_Interpreter(this, smb_session);
+	interp = new NetbiosSSN_Interpreter(this);
 	orig_netbios = resp_netbios = 0;
 	did_session_done = 0;
 
@@ -481,7 +461,6 @@ NetbiosSSN_Analyzer::NetbiosSSN_Analyzer(Connection* conn)
 NetbiosSSN_Analyzer::~NetbiosSSN_Analyzer()
 	{
 	delete interp;
-	delete smb_session;
 	}
 
 void NetbiosSSN_Analyzer::Done()

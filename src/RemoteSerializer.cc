@@ -3461,7 +3461,10 @@ void SocketComm::Run()
 		if ( io->CanWrite() )
 			++canwrites;
 
-		int a = select(max_fd + 1, &fd_read, &fd_write, &fd_except, 0);
+		struct timeval timeout;
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
+		int a = select(max_fd + 1, &fd_read, &fd_write, &fd_except, &timeout);
 
 		if ( selects % 100000 == 0 )
 			Log(fmt("selects=%ld canwrites=%ld pending=%lu",
