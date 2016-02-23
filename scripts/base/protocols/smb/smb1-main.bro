@@ -357,6 +357,7 @@ event smb_pipe_request(c: connection, hdr: SMB1::Header, op_num: count)
 	{
 	if ( c$smb_state$current_file?$uuid) {
 		c$smb_state$current_cmd$argument = fmt("%s: %s", SMB::rpc_uuids[c$smb_state$current_file$uuid],
+			SMB::rpc_sub_cmds[c$smb_state$current_file$uuid][op_num]);
 	}
 	}
 	
