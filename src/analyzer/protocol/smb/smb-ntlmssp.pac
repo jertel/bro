@@ -1,17 +1,4 @@
 refine connection SMB_Conn += {
-	function unicode_to_ascii(s: bytestring, length: uint16, is_unicode: bool): bytestring
-		%{
-		if ( !is_unicode ) return s;
-
-		char* buf;
-
-		buf = new char[(length/2) + 1];
-		
-		for ( int i = 0; i < length; i += 2 )
-			buf[i/2] = s[i];
-		buf[length/2] = 0;
-		return bytestring((uint8*) buf, (length/2));
-		%}
 
 	function build_negotiate_flag_record(val: SMB_NTLM_Negotiate_Flags): BroVal
 		%{
@@ -63,19 +50,19 @@ refine connection SMB_Conn += {
 		for ( uint i = 0; ${val.pairs[i].id} != 0; i++ ) {
 			switch ( ${val.pairs[i].id} ) {
 				case 1:
-					result->Assign(0, bytestring_to_val(${val.pairs[i].nb_computer_name.data}));
+					result->Assign(0, uint8s_to_stringval(${val.pairs[i].nb_computer_name.data}));
 					break;
 				case 2:
-					result->Assign(1, bytestring_to_val(${val.pairs[i].nb_domain_name.data}));
+					result->Assign(1, uint8s_to_stringval(${val.pairs[i].nb_domain_name.data}));
 					break;
 				case 3:
-					result->Assign(2, bytestring_to_val(${val.pairs[i].dns_computer_name.data}));
+					result->Assign(2, uint8s_to_stringval(${val.pairs[i].dns_computer_name.data}));
 					break;
 				case 4:
-					result->Assign(3, bytestring_to_val(${val.pairs[i].dns_domain_name.data}));
+					result->Assign(3, uint8s_to_stringval(${val.pairs[i].dns_domain_name.data}));
 					break;
 				case 5:
-					result->Assign(4, bytestring_to_val(${val.pairs[i].dns_tree_name.data}));
+					result->Assign(4, uint8s_to_stringval(${val.pairs[i].dns_tree_name.data}));
 					break;
 				case 6:
 					result->Assign(5, new Val(${val.pairs[i].constrained_auth}, TYPE_BOOL));
@@ -87,7 +74,7 @@ refine connection SMB_Conn += {
 					result->Assign(7, new Val(${val.pairs[i].single_host.machine_id}, TYPE_COUNT));
 					break;
 				case 9:
-					result->Assign(8, bytestring_to_val(${val.pairs[i].target_name.data}));
+					result->Assign(8, uint8s_to_stringval(${val.pairs[i].target_name.data}));
 					break;
 			}
 		}
@@ -119,35 +106,35 @@ refine connection SMB_Conn += {
 		result->Assign(0, build_negotiate_flag_record(${val.flags}));
 
 		if ( ${val.flags.negotiate_oem_domain_supplied} )
-			result->Assign(1, bytestring_to_val(${val.domain_name.string.data}));
+			result->Assign(1, uint8s_to_stringval(${val.domain_name.string.data}));
 
 		if ( ${val.flags.negotiate_oem_workstation_supplied} )
-			result->Assign(2, bytestring_to_val(${val.workstation.string.data}));
+			result->Assign(2, uint8s_to_stringval(${val.workstation.string.data}));
 
 		if ( ${val.flags.negotiate_version} )
 			result->Assign(3, build_version_record(${val.version}));
 
 		BifEvent::generate_smb_ntlm_negotiate(bro_analyzer(), bro_analyzer()->Conn(), BuildHeaderVal(header), result);
-		
+
 		return true;
 		%}
-		
+
 	function proc_smb_ntlm_challenge(header: SMB_Header, val: SMB_NTLM_Challenge): bool
 		%{
 		RecordVal* result = new RecordVal(BifType::Record::SMB::NTLMChallenge);
 		result->Assign(0, build_negotiate_flag_record(${val.flags}));
 
 		if ( ${val.flags.request_target} )
-			result->Assign(1, bytestring_to_val(${val.target_name.string.data}));
+			result->Assign(1, uint8s_to_stringval(${val.target_name.string.data}));
 
 		if ( ${val.flags.negotiate_version} )
 			result->Assign(2, build_version_record(${val.version}));
 
 		if ( ${val.flags.negotiate_target_info} )
 			result->Assign(3, build_av_record(${val.target_info}));
-		
+
 		BifEvent::generate_smb_ntlm_challenge(bro_analyzer(), bro_analyzer()->Conn(), BuildHeaderVal(header), result);
-		
+
 		return true;
 		%}
 
@@ -157,13 +144,13 @@ refine connection SMB_Conn += {
 		result->Assign(0, build_negotiate_flag_record(${val.flags}));
 
 		if ( ${val.domain_name_fields.length} > 0 )
-			result->Assign(1, bytestring_to_val(${val.domain_name.string.data}));
+			result->Assign(1, uint8s_to_stringval(${val.domain_name.string.data}));
 
 		if ( ${val.user_name_fields.length} > 0 )
-			result->Assign(2, bytestring_to_val(${val.user_name.string.data}));
+			result->Assign(2, uint8s_to_stringval(${val.user_name.string.data}));
 
 		if ( ${val.workstation_fields.length} > 0 )
-			result->Assign(3, bytestring_to_val(${val.workstation.string.data}));
+			result->Assign(3, uint8s_to_stringval(${val.workstation.string.data}));
 
 		if ( ${val.flags.negotiate_version} )
 			result->Assign(4, build_version_record(${val.version}));
@@ -241,7 +228,7 @@ type SMB_NTLM_SSP_Token(header: SMB_Header) = record {
 	 	1 -> negotiate   	: SMB_NTLM_Negotiate(header, offsetof(msg) - offsetof(signature));
 		2 -> challenge		: SMB_NTLM_Challenge(header, offsetof(msg) - offsetof(signature));
 		3 -> authenticate	: SMB_NTLM_Authenticate(header, offsetof(msg) - offsetof(signature));
-	};	 
+	};
 };
 
 type SMB_NTLM_Negotiate(header: SMB_Header, offset: uint16) = record {
@@ -320,9 +307,7 @@ type SMB_NTLM_StringData = record {
 };
 
 type SMB_Fixed_Length_String(unicode: bool) = record {
-	s: bytestring &restofdata;
-} &let {
-	data: bytestring = $context.connection.unicode_to_ascii(s, sizeof(s), unicode);
+  data: uint8[] &restofdata;
 };
 
 type SMB_NTLM_String(fields: SMB_NTLM_StringData, offset: uint16, unicode: bool) = record {
@@ -407,13 +392,13 @@ type SMB_NTLM_Negotiate_Flags = record {
 	negotiate_56						: bool = (flags & 0x80000000) > 0;
 	negotiate_key_exch					: bool = (flags & 0x40000000) > 0;
 	negotiate_128						: bool = (flags & 0x20000000) > 0;
-	
+
 	negotiate_version					: bool = (flags & 0x02000000) > 0;
-	
+
 	negotiate_target_info				: bool = (flags & 0x00800000) > 0;
 	request_non_nt_session_key			: bool = (flags & 0x00400000) > 0;
 	negotiate_identify					: bool = (flags & 0x00100000) > 0;
-	
+
 	negotiate_extended_sessionsecurity	: bool = (flags & 0x00040000) > 0;
 	target_type_server					: bool = (flags & 0x00020000) > 0;
 	target_type_domain					: bool = (flags & 0x00010000) > 0;
